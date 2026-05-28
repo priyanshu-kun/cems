@@ -5,6 +5,9 @@ const env = require('../config/env');
 const healthRoutes = require('./health.routes');
 const authRoutes = require('./auth.routes');
 const eventRoutes = require('./event.routes');
+const venueRoutes = require('./venue.routes');
+const userRoutes = require('./user.routes');
+const guestRoutes = require('./guest.routes');
 const marketingRoutes = require('./marketing.routes');
 const logisticsRoutes = require('./logistics.routes');
 
@@ -13,6 +16,9 @@ const router = express.Router();
 router.use('/', healthRoutes);
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
+router.use('/venues', venueRoutes);
+router.use('/users', userRoutes);
+router.use('/guests', guestRoutes);
 router.use('/marketing', marketingRoutes);
 router.use('/logistics', logisticsRoutes);
 

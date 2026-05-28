@@ -11,6 +11,14 @@ export async function getUser(id) {
   return api.get(`/users/${id}`);
 }
 
+export async function createUser(payload) {
+  return api.post("/users", payload);
+}
+
+export async function deleteUser(id) {
+  return api.del(`/users/${id}`);
+}
+
 export async function setUserRoles(id, roles) {
   return api.patch(`/users/${id}/roles`, { roles });
 }

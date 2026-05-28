@@ -24,6 +24,7 @@ const Rsvp = require('../models/rsvp.model');
 const GatePass = require('../models/gatePass.model');
 const Asset = require('../models/asset.model');
 const Announcement = require('../models/announcement.model');
+const Guest = require('../models/guest.model');
 const { sign, toQrPayload } = require('../utils/gatePassSigner');
 const { issueTokenPair } = require('../utils/jwt');
 
@@ -67,6 +68,11 @@ const DEMO_VENUES = Object.freeze([
   { name: 'Lecture Theatre 4', building: 'C Block', capacity: 120 },
 ]);
 
+const DEMO_GUEST_EMAILS = Object.freeze([
+  'rahul.mehta@partnercorp.com',
+  'neha.verma@guestmail.com',
+]);
+
 const DEMO_ASSETS = Object.freeze([
   { name: 'Projector — Epson EB', category: 'PROJECTOR', totalQuantity: 6 },
   { name: 'Microphone — Shure SM58', category: 'MICROPHONE', totalQuantity: 10 },
@@ -99,6 +105,13 @@ async function clearDemoData() {
     GatePass.deleteMany({ userId: { $in: userIds } }),
     Announcement.deleteMany({ authorId: { $in: userIds } }),
     Asset.deleteMany({ name: { $in: DEMO_ASSETS.map((a) => a.name) } }),
+    Guest.deleteMany({
+      $or: [
+        { createdBy: { $in: userIds } },
+        { invitedBy: { $in: userIds } }, // legacy field from the old per-event model
+        { email: { $in: DEMO_GUEST_EMAILS } },
+      ],
+    }),
   ]);
   await Promise.all([
     User.deleteMany({ _id: { $in: userIds } }),
@@ -115,10 +128,15 @@ async function seedAll() {
 
   await clearDemoData();
 
+  // Reconcile indexes with the current schemas — drops stale indexes left over
+  // from the earlier per-event guest / single-holder gate-pass models and builds
+  // the new partial unique indexes. (dev/test only; safe after clearing demo data.)
+  await Promise.all([GatePass.syncIndexes(), Guest.syncIndexes()]);
+
   // --- Users -------------------------------------------------------------
   const passwordHash = await User.hashPassword(DEMO_PASSWORD);
   const users = await User.insertMany(
-    DEMO_USERS.map((u) => ({ ...u, passwordHash, isEmailVerified: true }))
+    DEMO_USERS.map((u) => ({ ...u, passwordHash, isEmailVerified: true, isActive: true }))
   );
   const byEmail = Object.fromEntries(users.map((u) => [u.email, u]));
 
@@ -209,34 +227,25 @@ async function seedAll() {
   await Event.updateOne({ _id: approvedEvent._id }, { $inc: { rsvpCount: 1 } });
   await Event.updateOne({ _id: publishedEvent._id }, { $inc: { rsvpCount: 1 } });
 
-  // --- Gate passes for both RSVPs --------------------------------------
-  function buildPass(userId, event) {
+  // --- Gate passes (works for STUDENT and GUEST holders) ---------------
+  function buildPass(event, holder) {
     const issuedAt = new Date();
     const expiresAt = new Date(event.endTime);
     const ttlCap = new Date(event.startTime.getTime() + env.GATE_PASS_TTL_HOURS * HOUR);
     if (ttlCap < expiresAt) expiresAt.setTime(ttlCap.getTime());
 
-    const doc = new GatePass({
-      eventId: event._id,
-      userId,
-      issuedAt,
-      expiresAt,
-      signature: 'pending',
-    });
+    const doc = new GatePass({ eventId: event._id, issuedAt, expiresAt, signature: 'pending', ...holder });
+    const holderId = holder.holderType === 'GUEST' ? holder.guestId : holder.userId;
     doc.signature = sign({
       passId: doc.passId,
       eventId: doc.eventId,
-      userId: doc.userId,
+      holderType: doc.holderType,
+      holderId,
       issuedAt: doc.issuedAt,
       expiresAt: doc.expiresAt,
     });
     return doc;
   }
-
-  const studentPass = buildPass(student._id, approvedEvent);
-  const kashishPass = buildPass(kashish._id, publishedEvent);
-  await Promise.all([studentPass.save(), kashishPass.save()]);
-  const pass = studentPass;
 
   // --- Assets ----------------------------------------------------------
   const assets = await Asset.insertMany(
@@ -262,6 +271,30 @@ async function seedAll() {
     },
   ]);
 
+  // --- College-wide guest registry -------------------------------------
+  const guests = await Guest.insertMany([
+    {
+      fullName: 'Rahul Mehta',
+      email: 'rahul.mehta@partnercorp.com',
+      phone: '+91 90000 11111',
+      organization: 'PartnerCorp',
+      createdBy: organizer._id,
+    },
+    {
+      fullName: 'Neha Verma',
+      email: 'neha.verma@guestmail.com',
+      organization: 'Alumni Association',
+      createdBy: admin._id,
+    },
+  ]);
+
+  // --- Gate passes: students (self) + one guest attendee on the APPROVED event
+  const studentPass = buildPass(approvedEvent, { holderType: 'STUDENT', userId: student._id });
+  const kashishPass = buildPass(publishedEvent, { holderType: 'STUDENT', userId: kashish._id });
+  const guestPass = buildPass(approvedEvent, { holderType: 'GUEST', guestId: guests[0]._id });
+  await Promise.all([studentPass.save(), kashishPass.save(), guestPass.save()]);
+  const pass = studentPass;
+
   // --- Pre-built tokens for convenience --------------------------------
   const tokens = {
     kashish: issueTokenPair(kashish),
@@ -284,9 +317,10 @@ async function seedAll() {
       venues: venues.length,
       events: events.length,
       rsvps: 2,
-      gatePasses: 2,
+      gatePasses: 3,
       assets: assets.length,
       announcements: announcements.length,
+      guests: guests.length,
     },
     samples: {
       approvedEventId: String(approvedEvent._id),
@@ -295,6 +329,8 @@ async function seedAll() {
       gatePassQr: toQrPayload(pass),
       kashishGatePassId: kashishPass.passId,
       kashishGatePassQr: toQrPayload(kashishPass),
+      guestId: String(guests[0]._id),
+      guestGatePassQr: toQrPayload(guestPass),
     },
   };
 }

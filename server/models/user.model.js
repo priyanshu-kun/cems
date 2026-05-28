@@ -40,6 +40,7 @@ const userSchema = new mongoose.Schema(
     department: { type: String, trim: true },
     year: { type: Number, min: 1, max: 6 },
     isEmailVerified: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true, index: true },
     rsvpedEvents: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'Event', index: true },
     ],

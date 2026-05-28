@@ -15,7 +15,8 @@ const issueGatePassSchema = z.object({
 const verifyGatePassSchema = z.object({
   passId: z.string().min(1),
   eventId: objectId,
-  userId: objectId,
+  holderType: z.enum(['STUDENT', 'GUEST']),
+  holderId: z.string().min(1),
   issuedAt: z.string().min(1),
   expiresAt: z.string().min(1),
   sig: z.string().min(1),

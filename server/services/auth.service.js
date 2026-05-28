@@ -33,6 +33,9 @@ async function login({ email, password }) {
   if (!ok) {
     throw new DomainError('UNAUTHENTICATED', 'invalid credentials');
   }
+  if (user.isActive === false) {
+    throw new DomainError('FORBIDDEN', 'this account has been deactivated — contact an administrator');
+  }
 
   user.lastLoginAt = new Date();
   await user.save();

@@ -62,7 +62,12 @@ export function ScannerPage() {
           extras={
             result.pass ? (
               <div className="col gap-1" style={{ alignItems: "center" }}>
-                <div className="t-small">{result.pass.eventId ? `Event ${result.pass.eventId}` : ""}</div>
+                {result.holder ? (
+                  <>
+                    <div className="t-strong">{result.holder.name}</div>
+                    <div className="t-small">{result.holder.type === "GUEST" ? "Guest" : "Student"}{result.holder.detail ? ` · ${result.holder.detail}` : ""}</div>
+                  </>
+                ) : null}
                 <div className="t-caption" style={{ fontFamily: "ui-monospace, monospace", textTransform: "none" }}>
                   {result.pass.passId}
                 </div>
@@ -110,7 +115,7 @@ export function ScannerPage() {
             onChange={setPayload}
             rows={6}
             style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13 }}
-            placeholder='{"v":1,"passId":"…","eventId":"…","userId":"…","issuedAt":"…","expiresAt":"…","sig":"…"}'
+            placeholder='{"v":1,"passId":"…","eventId":"…","holderType":"STUDENT","holderId":"…","issuedAt":"…","expiresAt":"…","sig":"…"}'
           />
         </Field>
         <Banner kind="info">
