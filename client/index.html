@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1E3A8A" />
+    <title>CEMS — College Event Management System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Fallback shown when Vite isn't running. React replaces #root on boot. */
+      .boot-fallback {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+        background: #F1F5F9;
+        color: #0F172A;
+        padding: 24px;
+      }
+      .boot-fallback .card {
+        max-width: 480px;
+        background: #fff;
+        border: 1px solid #E2E8F0;
+        border-radius: 14px;
+        padding: 28px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      }
+      .boot-fallback h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.01em; }
+      .boot-fallback p  { margin: 8px 0; line-height: 1.55; color: #475569; }
+      .boot-fallback code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px;
+        padding: 1px 6px; font-size: 0.92em;
+      }
+      .boot-fallback .mark {
+        width: 40px; height: 40px; border-radius: 10px; background: #1E3A8A;
+        color: #fff; display: inline-flex; align-items: center; justify-content: center;
+        font-weight: 700; margin-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot-fallback">
+        <div class="card">
+          <div class="mark">C</div>
+          <h1>CEMS frontend isn't running yet</h1>
+          <p>You opened the source <code>index.html</code> directly. This file is a Vite entry — it needs a build step before it'll render the app.</p>
+          <p style="margin-top:16px"><strong>Run locally:</strong></p>
+          <p><code>npm install &amp;&amp; npm run dev</code></p>
+          <p><strong>Deploy:</strong></p>
+          <p><code>npm run build</code> &nbsp;and host the <code>dist/</code> folder anywhere static.</p>
+          <p style="margin-top:16px">For a quick visual preview without Node, open <code>preview.html</code> in the same folder.</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

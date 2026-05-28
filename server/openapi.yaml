@@ -1,0 +1,1014 @@
+openapi: 3.1.0
+info:
+  title: College Event Management System (CEMS) API
+  version: 1.0.0
+  description: |
+    Backend API for the College Event Management System.
+
+    **Conventions**
+    - Every response uses the envelope `{ success, data, error }`.
+    - All authenticated endpoints expect `Authorization: Bearer <accessToken>`.
+    - All timestamps are ISO-8601 strings (UTC unless an offset is present).
+    - Error `code` values are stable and machine-readable; map them to user copy
+      on the client per the frontend design brief.
+  contact:
+    name: CEMS Team
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local development
+  - url: https://api.cems.example.edu/v1
+    description: Placeholder production
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Events
+  - name: RSVP
+  - name: Marketing
+  - name: Logistics — Gate Pass
+  - name: Logistics — Assets
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [status, uptime]
+                        properties:
+                          status: { type: string, enum: [ok] }
+                          uptime: { type: number, description: Process uptime in seconds }
+
+  # ---------------------------------------------------------------------------
+  # AUTH
+  # ---------------------------------------------------------------------------
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Account created; returns user + token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSuccessResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                duplicate:
+                  value:
+                    success: false
+                    data: null
+                    error:
+                      code: DUPLICATE_RESOURCE
+                      message: email already registered
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Exchange credentials for a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSuccessResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate a refresh token into a fresh access/refresh pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string, minLength: 10 }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [accessToken, refreshToken]
+                        properties:
+                          accessToken: { type: string }
+                          refreshToken: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the authenticated principal
+      responses:
+        '200':
+          description: The current principal
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          principal: { $ref: '#/components/schemas/Principal' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  # ---------------------------------------------------------------------------
+  # EVENTS
+  # ---------------------------------------------------------------------------
+  /events:
+    get:
+      tags: [Events]
+      summary: List events
+      parameters:
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/EventStatus' }
+        - in: query
+          name: venueId
+          schema: { type: string, description: ObjectId }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: skip
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: A page of events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/EventPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Events]
+      summary: Create an event (organizer/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateEventRequest' }
+      responses:
+        '201':
+          description: Event created in PENDING_APPROVAL
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /events/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ObjectIdPath'
+    get:
+      tags: [Events]
+      summary: Get one event
+      responses:
+        '200':
+          description: The event
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Event' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /events/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/ObjectIdPath'
+    patch:
+      tags: [Events]
+      summary: Transition event lifecycle status
+      description: |
+        Validates the source→target transition against the lifecycle state machine.
+        Transitioning **into** an ACTIVE status (`APPROVED`, `PUBLISHED`, `ONGOING`)
+        triggers the FCFS venue-overlap guard — first commit wins, others get 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/EventStatus' }
+      responses:
+        '200':
+          description: Event with new status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Event' }
+        '400':
+          description: Illegal transition or validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/VenueConflict' }
+
+  /events/{id}/rsvp:
+    parameters:
+      - $ref: '#/components/parameters/ObjectIdPath'
+    post:
+      tags: [RSVP]
+      summary: RSVP to an event
+      description: Atomic against the event's capacity; first-come-first-served.
+      responses:
+        '201':
+          description: RSVP confirmed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Rsvp' }
+        '400':
+          description: Capacity reached or event not RSVP-eligible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already RSVPed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    delete:
+      tags: [RSVP]
+      summary: Cancel an existing RSVP
+      responses:
+        '200':
+          description: RSVP cancelled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Rsvp' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # MARKETING
+  # ---------------------------------------------------------------------------
+  /marketing/feed:
+    get:
+      tags: [Marketing]
+      summary: Audience-filtered notice-board feed
+      description: |
+        Server filters announcements by the caller's department/year/roles.
+        Each facet treats an empty/missing target as "everyone."
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - in: query
+          name: skip
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: A page of announcements
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items, total, limit, skip]
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/Announcement' }
+                          total: { type: integer }
+                          limit: { type: integer }
+                          skip: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /marketing/announcements:
+    post:
+      tags: [Marketing]
+      summary: Create an announcement (organizer/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAnnouncementRequest' }
+      responses:
+        '201':
+          description: Announcement published
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Announcement' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # LOGISTICS — GATE PASS
+  # ---------------------------------------------------------------------------
+  /logistics/gate-pass:
+    post:
+      tags: [Logistics — Gate Pass]
+      summary: Issue a gate pass for the authenticated user
+      description: |
+        Requires a CONFIRMED RSVP for the event. Returns a stored pass and a
+        self-contained QR payload that includes an HMAC-SHA256 signature.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId]
+              properties:
+                eventId: { type: string, description: ObjectId }
+      responses:
+        '201':
+          description: Pass issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [pass, qr]
+                        properties:
+                          pass: { $ref: '#/components/schemas/GatePass' }
+                          qr:   { $ref: '#/components/schemas/GatePassQr' }
+        '400':
+          description: Event is not in a pass-issuable state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: No confirmed RSVP for this event
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /logistics/gate-pass/verify:
+    post:
+      tags: [Logistics — Gate Pass]
+      summary: Verify a gate-pass QR payload (organizer/admin)
+      description: |
+        Validates signature + expiry, then optionally checks DB status (revoked / consumed).
+        `success: false` with `INVALID_PASS` is returned when the pass fails any check;
+        HTTP status is `200` either way since the verification operation itself succeeded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatePassQr' }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerifyResultEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /logistics/gate-pass/consume:
+    post:
+      tags: [Logistics — Gate Pass]
+      summary: Mark a gate pass as consumed (organizer/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passId]
+              properties:
+                passId: { type: string }
+      responses:
+        '200':
+          description: Pass consumed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/GatePass' }
+        '400':
+          description: Pass is missing, expired, or already consumed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # LOGISTICS — ASSETS
+  # ---------------------------------------------------------------------------
+  /logistics/assets:
+    get:
+      tags: [Logistics — Assets]
+      summary: List active assets
+      responses:
+        '200':
+          description: All active assets
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/Asset' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Logistics — Assets]
+      summary: Create an asset (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAssetRequest' }
+      responses:
+        '201':
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Asset' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /logistics/assets/{id}/reserve:
+    parameters:
+      - $ref: '#/components/parameters/ObjectIdPath'
+    post:
+      tags: [Logistics — Assets]
+      summary: Atomically reserve N units of an asset (organizer/admin)
+      description: |
+        Reservation is lock-free via a conditional `$inc` — concurrent callers can
+        never oversubscribe. Insufficient stock yields a `VALIDATION_ERROR`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetQuantityRequest' }
+      responses:
+        '200':
+          description: Reservation applied
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Asset' }
+        '400':
+          description: Insufficient stock or invalid quantity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /logistics/assets/{id}/release:
+    parameters:
+      - $ref: '#/components/parameters/ObjectIdPath'
+    post:
+      tags: [Logistics — Assets]
+      summary: Release previously-reserved units back to stock (organizer/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetQuantityRequest' }
+      responses:
+        '200':
+          description: Release applied
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Asset' }
+        '400':
+          description: Cannot release more than what is out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ObjectIdPath:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-fA-F0-9]{24}$'
+        description: MongoDB ObjectId
+
+  responses:
+    Unauthenticated:
+      description: Missing, malformed, or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            expired:
+              value:
+                success: false
+                data: null
+                error: { code: UNAUTHENTICATED, message: token expired }
+    Forbidden:
+      description: Authenticated but lacking the required role
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            forbidden:
+              value:
+                success: false
+                data: null
+                error: { code: FORBIDDEN, message: 'requires one of: ORGANIZER, ADMIN' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationError:
+      description: Request payload failed validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            zod:
+              value:
+                success: false
+                data: null
+                error:
+                  code: VALIDATION_ERROR
+                  message: request validation failed
+                  details:
+                    'body.email': Invalid email
+                    'body.password': String must contain at least 8 character(s)
+    VenueConflict:
+      description: Venue is already booked for this slot
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            conflict:
+              value:
+                success: false
+                data: null
+                error: { code: VENUE_CONFLICT, message: venue is already booked for this slot }
+
+  schemas:
+    # --- envelopes -----------------------------------------------------------
+    SuccessEnvelope:
+      type: object
+      required: [success, data, error]
+      properties:
+        success: { type: boolean, enum: [true] }
+        data:    { type: [object, 'null'] }
+        error:   { type: 'null' }
+    ErrorEnvelope:
+      type: object
+      required: [success, data, error]
+      properties:
+        success: { type: boolean, enum: [false] }
+        data:    { type: 'null' }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:    { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: { type: string }
+
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - INVALID_TIME_RANGE
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - VENUE_CONFLICT
+        - DUPLICATE_RESOURCE
+        - RATE_LIMITED
+        - INVALID_PASS
+        - INTERNAL
+
+    # --- domain primitives ---------------------------------------------------
+    Role:
+      type: string
+      enum: [STUDENT, ORGANIZER, ADMIN]
+
+    EventStatus:
+      type: string
+      enum:
+        - DRAFT
+        - PENDING_APPROVAL
+        - APPROVED
+        - PUBLISHED
+        - ONGOING
+        - COMPLETED
+        - CANCELLED
+
+    RsvpStatus:
+      type: string
+      enum: [CONFIRMED, CANCELLED, ATTENDED]
+
+    GatePassStatus:
+      type: string
+      enum: [ISSUED, CONSUMED, REVOKED, EXPIRED]
+
+    AssetCategory:
+      type: string
+      enum: [PROJECTOR, MICROPHONE, SPEAKER, CHAIR, TABLE, OTHER]
+
+    Principal:
+      type: object
+      required: [userId, roles]
+      properties:
+        userId: { type: string }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/Role' }
+
+    User:
+      type: object
+      required: [_id, fullName, email, roles]
+      properties:
+        _id:             { type: string }
+        fullName:        { type: string }
+        email:           { type: string, format: email }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/Role' }
+        department:      { type: [string, 'null'] }
+        year:            { type: [integer, 'null'], minimum: 1, maximum: 6 }
+        isEmailVerified: { type: boolean }
+        lastLoginAt:     { type: [string, 'null'], format: date-time }
+        createdAt:       { type: string, format: date-time }
+        updatedAt:       { type: string, format: date-time }
+
+    TargetAudience:
+      type: object
+      properties:
+        departments:
+          type: array
+          items: { type: string }
+        years:
+          type: array
+          items: { type: integer, minimum: 1, maximum: 6 }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/Role' }
+
+    # --- requests ------------------------------------------------------------
+    RegisterRequest:
+      type: object
+      required: [fullName, email, password]
+      properties:
+        fullName:   { type: string, minLength: 2, maxLength: 80 }
+        email:      { type: string, format: email }
+        password:   { type: string, minLength: 8, maxLength: 128 }
+        department: { type: string, maxLength: 80 }
+        year:       { type: integer, minimum: 1, maximum: 6 }
+        roles:
+          description: Only honored when the caller is already an ADMIN; ignored otherwise.
+          type: array
+          items: { $ref: '#/components/schemas/Role' }
+          minItems: 1
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string }
+
+    AuthSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [user, accessToken, refreshToken]
+              properties:
+                user:         { $ref: '#/components/schemas/User' }
+                accessToken:  { type: string }
+                refreshToken: { type: string }
+
+    CreateEventRequest:
+      type: object
+      required: [title, description, venueId, startTime, endTime, capacity]
+      properties:
+        title:       { type: string, minLength: 3, maxLength: 160 }
+        description: { type: string, minLength: 3, maxLength: 4000 }
+        venueId:     { type: string, description: ObjectId }
+        startTime:   { type: string, format: date-time }
+        endTime:     { type: string, format: date-time }
+        capacity:    { type: integer, minimum: 1, maximum: 10000 }
+        tags:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 40 }
+        targetAudience: { $ref: '#/components/schemas/TargetAudience' }
+
+    CreateAnnouncementRequest:
+      type: object
+      required: [title, body]
+      properties:
+        title:    { type: string, minLength: 3, maxLength: 160 }
+        body:     { type: string, minLength: 3, maxLength: 4000 }
+        eventId:  { type: string, description: Optional ObjectId of the related event }
+        isPinned: { type: boolean }
+        targetAudience: { $ref: '#/components/schemas/TargetAudience' }
+
+    CreateAssetRequest:
+      type: object
+      required: [name, category, totalQuantity]
+      properties:
+        name:              { type: string, minLength: 2, maxLength: 120 }
+        category:          { $ref: '#/components/schemas/AssetCategory' }
+        totalQuantity:     { type: integer, minimum: 0 }
+        availableQuantity: { type: integer, minimum: 0, description: Defaults to totalQuantity when omitted }
+        notes:             { type: string, maxLength: 500 }
+
+    AssetQuantityRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 1 }
+
+    # --- entities ------------------------------------------------------------
+    Event:
+      type: object
+      required: [_id, title, description, organizerId, venueId, startTime, endTime, status, capacity, rsvpCount]
+      properties:
+        _id:         { type: string }
+        title:       { type: string }
+        description: { type: string }
+        organizerId: { type: string }
+        venueId:     { type: string }
+        startTime:   { type: string, format: date-time }
+        endTime:     { type: string, format: date-time }
+        status:      { $ref: '#/components/schemas/EventStatus' }
+        capacity:    { type: integer }
+        rsvpCount:   { type: integer }
+        viewCount:   { type: integer }
+        tags:
+          type: array
+          items: { type: string }
+        targetAudience: { $ref: '#/components/schemas/TargetAudience' }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+
+    EventPage:
+      type: object
+      required: [items, total, limit, skip]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        total: { type: integer }
+        limit: { type: integer }
+        skip:  { type: integer }
+
+    Rsvp:
+      type: object
+      required: [_id, userId, eventId, status]
+      properties:
+        _id:         { type: string }
+        userId:      { type: string }
+        eventId:     { type: string }
+        status:      { $ref: '#/components/schemas/RsvpStatus' }
+        confirmedAt: { type: string, format: date-time }
+        attendedAt:  { type: [string, 'null'], format: date-time }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+
+    Announcement:
+      type: object
+      required: [_id, title, body, authorId, publishedAt]
+      properties:
+        _id:         { type: string }
+        title:       { type: string }
+        body:        { type: string }
+        authorId:    { type: string }
+        eventId:     { type: [string, 'null'] }
+        targetAudience: { $ref: '#/components/schemas/TargetAudience' }
+        publishedAt: { type: string, format: date-time }
+        isPinned:    { type: boolean }
+        viewCount:   { type: integer }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+
+    Asset:
+      type: object
+      required: [_id, name, category, totalQuantity, availableQuantity, isActive]
+      properties:
+        _id:               { type: string }
+        name:              { type: string }
+        category:          { $ref: '#/components/schemas/AssetCategory' }
+        totalQuantity:     { type: integer }
+        availableQuantity: { type: integer }
+        isActive:          { type: boolean }
+        notes:             { type: [string, 'null'] }
+        __v:               { type: integer, description: Mongoose version key (optimistic concurrency) }
+        createdAt:         { type: string, format: date-time }
+        updatedAt:         { type: string, format: date-time }
+
+    GatePass:
+      type: object
+      required: [_id, passId, txnTrackId, eventId, userId, issuedAt, expiresAt, status, signature]
+      properties:
+        _id:        { type: string }
+        passId:     { type: string, description: Public UUID printed on the QR }
+        txnTrackId: { type: string, description: Transaction identifier for audit }
+        eventId:    { type: string }
+        userId:     { type: string }
+        issuedAt:   { type: string, format: date-time }
+        expiresAt:  { type: string, format: date-time }
+        status:     { $ref: '#/components/schemas/GatePassStatus' }
+        signature:  { type: string, description: hex-encoded HMAC-SHA256 }
+        consumedAt: { type: [string, 'null'], format: date-time }
+        allocatedAssets:
+          type: array
+          items:
+            type: object
+            properties:
+              assetId:  { type: string }
+              quantity: { type: integer, minimum: 1 }
+        createdAt:  { type: string, format: date-time }
+        updatedAt:  { type: string, format: date-time }
+
+    GatePassQr:
+      type: object
+      description: |
+        The self-contained QR payload. Encode this object as JSON and render the
+        result into a QR code. The same shape is accepted by the verify endpoint.
+      required: [passId, eventId, userId, issuedAt, expiresAt, sig]
+      properties:
+        v:         { type: integer, description: Payload version (currently 1) }
+        passId:    { type: string }
+        eventId:   { type: string }
+        userId:    { type: string }
+        issuedAt:  { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        sig:       { type: string, description: hex-encoded HMAC-SHA256 }
+
+    VerifyResultEnvelope:
+      description: |
+        Special envelope: HTTP 200 with `success: false` and `error.code = INVALID_PASS`
+        means the verify operation completed but the pass did not validate. Distinct
+        from a 4xx, which means the verify request itself was malformed or unauthorized.
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          required: [valid, reason]
+          properties:
+            valid:  { type: boolean }
+            reason: { type: string, description: human-readable detail }
+            pass:
+              oneOf:
+                - $ref: '#/components/schemas/GatePass'
+                - type: 'null'
+        error:
+          oneOf:
+            - type: 'null'
+            - type: object
+              properties:
+                code:    { type: string, enum: [INVALID_PASS] }
+                message: { type: string }
