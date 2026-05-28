@@ -5,6 +5,7 @@ import { Field, Input, Select, Textarea, Chips } from "../components/Form.jsx";
 import { Card, Banner } from "../components/Primitives.jsx";
 import { Icon } from "../components/Icon.jsx";
 import * as EventsAPI from "../api/events.js";
+import * as VenuesAPI from "../api/venues.js";
 import { useToast } from "../context/ToastContext.jsx";
 import { errorMessage } from "../utils/format.js";
 import config from "../config.js";
@@ -25,7 +26,24 @@ export function CreateEventPage() {
   const [loading, setLoading] = useState(false);
   const [topError, setTopError] = useState(null);
 
+  // Venues are fetched live from the backend.
+  const [venues, setVenues] = useState(null);  // null = loading, [] = none
+  const [venuesError, setVenuesError] = useState(false);
+
   useEffect(() => { document.title = `Create event · ${config.appName}`; }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await VenuesAPI.listVenues();
+        if (alive) setVenues(list);
+      } catch {
+        if (alive) { setVenues([]); setVenuesError(true); }
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -79,7 +97,8 @@ export function CreateEventPage() {
     }
   };
 
-  const hasVenueOptions = config.venues.length > 0;
+  const venuesLoading = venues === null;
+  const hasVenueOptions = Array.isArray(venues) && venues.length > 0;
 
   return (
     <form className="col gap-6" onSubmit={submit} noValidate>
@@ -110,18 +129,35 @@ export function CreateEventPage() {
             label="Venue"
             error={errors.venueId}
             htmlFor="ev-venue"
-            helper={hasVenueOptions ? null : "Paste the venue ObjectId from your backend. Configure VITE_VENUES in .env to get a dropdown."}
+            helper={
+              venuesLoading
+                ? "Loading venues…"
+                : hasVenueOptions
+                  ? null
+                  : venuesError
+                    ? "Couldn't load venues. Type a venue ID, or ask an admin to add venues."
+                    : "No venues yet — ask an admin to add one under Venues."
+            }
           >
             {hasVenueOptions ? (
               <Select
                 id="ev-venue"
                 value={form.venueId}
                 onChange={(v) => set("venueId", v)}
-                options={config.venues.map((v) => ({ value: v.id, label: v.name }))}
+                options={venues.map((v) => ({
+                  value: v._id,
+                  label: `${v.name}${v.building ? ` · ${v.building}` : ""} (cap ${v.capacity})`,
+                }))}
                 placeholder="Choose a venue"
               />
             ) : (
-              <Input id="ev-venue" value={form.venueId} onChange={(v) => set("venueId", v)} placeholder="24-char ObjectId" />
+              <Input
+                id="ev-venue"
+                value={form.venueId}
+                onChange={(v) => set("venueId", v)}
+                placeholder={venuesLoading ? "Loading…" : "Venue ID"}
+                disabled={venuesLoading}
+              />
             )}
           </Field>
 

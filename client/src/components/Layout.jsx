@@ -28,6 +28,8 @@ const NAV = {
     { to: "/home", label: "Dashboard", icon: "home" },
     { to: "/approvals", label: "Approvals", icon: "inbox" },
     { to: "/events", label: "All events", icon: "calendar" },
+    { to: "/people", label: "People", icon: "users" },
+    { to: "/venues", label: "Venues", icon: "map-pin" },
     { to: "/scanner", label: "Scanner", icon: "scan" },
     { to: "/assets", label: "Assets", icon: "package" },
     { to: "/profile", label: "Profile", icon: "user" },

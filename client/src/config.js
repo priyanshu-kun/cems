@@ -32,12 +32,8 @@ export const config = {
   assetCategories: csv(env.VITE_ASSET_CATEGORIES, [
     "PROJECTOR", "MICROPHONE", "SPEAKER", "CHAIR", "TABLE", "OTHER",
   ]),
-
-  // Pipe-separated id|name pairs, comma-separated entries.
-  venues: csv(env.VITE_VENUES).map((entry) => {
-    const [id, name] = entry.split("|");
-    return { id: (id || "").trim(), name: (name || id || "").trim() };
-  }).filter((v) => v.id),
+  // Venues are no longer configured here — they are fetched live from
+  // GET /venues (see src/api/venues.js).
 };
 
 export default config;

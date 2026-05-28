@@ -19,6 +19,9 @@ import { CreateAnnouncementPage } from "./pages/CreateAnnouncementPage.jsx";
 import { ApprovalsPage } from "./pages/ApprovalsPage.jsx";
 import { ScannerPage } from "./pages/ScannerPage.jsx";
 import { AssetsPage } from "./pages/AssetsPage.jsx";
+import { VenuesPage } from "./pages/VenuesPage.jsx";
+import { StudentsPage } from "./pages/StudentsPage.jsx";
+import { GuestsPage } from "./pages/GuestsPage.jsx";
 
 export default function App() {
   return (
@@ -82,6 +85,30 @@ export default function App() {
                   element={
                     <ProtectedRoute roles={["ORGANIZER", "ADMIN"]}>
                       <AssetsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/venues"
+                  element={
+                    <ProtectedRoute roles={["ADMIN"]}>
+                      <VenuesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/people"
+                  element={
+                    <ProtectedRoute roles={["ADMIN"]}>
+                      <StudentsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/events/:id/guests"
+                  element={
+                    <ProtectedRoute roles={["ORGANIZER", "ADMIN"]}>
+                      <GuestsPage />
                     </ProtectedRoute>
                   }
                 />

@@ -181,6 +181,7 @@ export function EventDetailPage() {
             {!["CANCELLED", "COMPLETED"].includes(event.status) ? (
               <Button variant="danger" loading={adminBusy} onClick={() => setStatus("CANCELLED")}>Cancel event</Button>
             ) : null}
+            <Button variant="ghost" leadingIcon="users" onClick={() => navigate(`/events/${id}/guests`)}>Manage guests</Button>
           </div>
         </Card>
       ) : null}
@@ -196,6 +197,7 @@ export function EventDetailPage() {
             {!["CANCELLED", "COMPLETED"].includes(event.status) ? (
               <Button variant="danger" loading={adminBusy} onClick={() => setStatus("CANCELLED")}>Cancel event</Button>
             ) : null}
+            <Button variant="ghost" leadingIcon="users" onClick={() => navigate(`/events/${id}/guests`)}>Manage guests</Button>
           </div>
         </Card>
       ) : null}
